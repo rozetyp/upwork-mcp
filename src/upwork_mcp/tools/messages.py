@@ -1,7 +1,32 @@
 """Messaging tools for Upwork MCP."""
 
+import asyncio
 from pydantic import BaseModel, Field
 from ..browser.client import get_browser
+
+# Upwork messaging lives here now; the old /nx/messages path 404s.
+MESSAGES_URL = "https://www.upwork.com/ab/messages/rooms"
+
+# Extract conversation rooms by their stable room-link anchor (data-test attrs are unreliable).
+_ROOMS_JS = r"""
+() => {
+  const out = [], seen = new Set();
+  for (const a of document.querySelectorAll('a[href*="/messages/rooms/"]')) {
+    const href = a.getAttribute('href') || '';
+    const m = href.match(/\/rooms\/([^\/?#]+)/);
+    if (!m || !m[1]) continue;            // skip the base /rooms/ link (empty inbox)
+    const id = m[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      room_id: id,
+      room_url: href.startsWith('http') ? href : 'https://www.upwork.com' + href,
+      text: (a.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 300),
+    });
+  }
+  return out;
+}
+"""
 
 
 class MessagesParams(BaseModel):
@@ -26,33 +51,34 @@ async def get_messages(params: MessagesParams) -> list[dict]:
     await browser.ensure_logged_in()
     page = await browser.get_page()
 
-    # Navigate to messages
-    url = "https://www.upwork.com/nx/messages"
-    if params.unread_only:
-        url += "?filter=unread"
-
-    await page.goto(url, wait_until="networkidle")
-
-    conversations = []
-
-    # Wait for message list
     try:
-        await page.wait_for_selector('[data-test="room-list"], .room-list, .message-list', timeout=10000)
+        await page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
     except Exception:
         pass
 
-    # Extract conversation items
-    room_els = await page.query_selector_all('[data-test="room-item"], .room-item, .conversation-item')
-
-    for el in room_els[:params.limit]:
+    # Wait for the messaging app to render (rooms appear, or the empty-inbox notice shows).
+    for _ in range(10):
+        await asyncio.sleep(1.5)
         try:
-            conv = await _extract_conversation(el)
-            if conv:
-                conversations.append(conv)
+            if "moment" in (await page.title()).lower():
+                continue
+            ready = await page.evaluate(
+                "() => document.querySelectorAll('a[href*=\"/messages/rooms/\"]').length > 0"
+                " || /Conversations will appear here|Welcome to Messages/i.test(document.body.innerText)"
+            )
         except Exception:
-            continue
+            ready = False
+        if ready:
+            break
 
-    return conversations
+    try:
+        rooms = await page.evaluate(_ROOMS_JS)
+    except Exception:
+        rooms = []
+
+    if params.unread_only:
+        rooms = [r for r in rooms if "unread" in (r.get("text") or "").lower()]
+    return rooms[:params.limit]
 
 
 async def _extract_conversation(el) -> dict | None:
@@ -116,9 +142,10 @@ async def get_conversation_messages(room_id: str, limit: int = 50) -> dict:
     if room_id.startswith("http"):
         url = room_id
     else:
-        url = f"https://www.upwork.com/nx/messages/{room_id}"
+        url = f"https://www.upwork.com/ab/messages/rooms/{room_id}"
 
-    await page.goto(url, wait_until="networkidle")
+    await page.goto(url, wait_until="domcontentloaded")
+    await asyncio.sleep(3)
 
     conversation = {"room_id": room_id, "messages": []}
 
@@ -202,9 +229,10 @@ async def send_message(params: SendMessageParams) -> dict:
     if params.room_id.startswith("http"):
         url = params.room_id
     else:
-        url = f"https://www.upwork.com/nx/messages/{params.room_id}"
+        url = f"https://www.upwork.com/ab/messages/rooms/{params.room_id}"
 
-    await page.goto(url, wait_until="networkidle")
+    await page.goto(url, wait_until="domcontentloaded")
+    await asyncio.sleep(3)
 
     # Find message input
     input_el = await page.query_selector('[data-test="message-input"], textarea[name*="message"], .message-input textarea')
@@ -243,15 +271,22 @@ async def get_unread_count() -> dict:
     await browser.ensure_logged_in()
     page = await browser.get_page()
 
-    # Check messages badge in header
-    await page.goto("https://www.upwork.com/nx/find-work/", wait_until="networkidle")
+    try:
+        await page.goto(MESSAGES_URL, wait_until="domcontentloaded", timeout=45000)
+    except Exception:
+        pass
+    for _ in range(8):
+        await asyncio.sleep(1.5)
+        try:
+            if "moment" not in (await page.title()).lower():
+                break
+        except Exception:
+            continue
 
-    unread_el = await page.query_selector('[data-test="messages-badge"], .messages-count, .unread-count')
-    if unread_el:
-        text = (await unread_el.text_content() or "").strip()
-        import re
-        numbers = re.findall(r'\d+', text)
-        if numbers:
-            return {"unread_count": int(numbers[0])}
-
-    return {"unread_count": 0}
+    # Count room anchors whose row text marks them unread. Empty inbox -> 0.
+    try:
+        rooms = await page.evaluate(_ROOMS_JS)
+    except Exception:
+        rooms = []
+    unread = sum(1 for r in rooms if "unread" in (r.get("text") or "").lower())
+    return {"unread_count": unread}

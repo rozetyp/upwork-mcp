@@ -28,9 +28,10 @@ Every result carries the **proposal count** (competition) when Upwork exposes it
 
 Honest state as of this fork (browser-scraping tools drift when Upwork changes its markup):
 
-- **Verified working — read-only, tested live:** `upwork_check_session`, `upwork_search_jobs`, `upwork_get_job_details`, `upwork_get_connects_balance`, `upwork_get_my_profile`, `upwork_get_profile_stats`, `upwork_get_proposals`
+- **Verified working — read-only, tested live:** `upwork_check_session`, `upwork_search_jobs`, `upwork_get_job_details`, `upwork_get_connects_balance`, `upwork_get_my_profile`, `upwork_get_profile_stats`, `upwork_get_proposals`, `upwork_get_messages`, `upwork_get_unread_count` (the last two verified against an empty inbox — the correct URL is now `/ab/messages/rooms`; per-conversation row parsing hasn't yet been seen with a live conversation)
 - **Present but NOT tested — they take real, billable or outward actions, so exercise deliberately:** `upwork_submit_proposal`, `upwork_send_message`, `upwork_withdraw_proposal`
-- **Not yet verified against current Upwork markup (may need the same text-parsing fix):** `upwork_get_proposal_details`, `upwork_get_messages`, `upwork_get_conversation`, `upwork_get_unread_count`, `upwork_get_contracts`, `upwork_get_contract_details`, `upwork_get_work_diary`
+- **URL corrected but content parsing not yet validated against a live conversation:** `upwork_get_conversation`
+- **Not yet verified against current Upwork markup (may need the same text-parsing fix):** `upwork_get_proposal_details`, `upwork_get_contracts`, `upwork_get_contract_details`, `upwork_get_work_diary`
 
 ## How It Works
 
@@ -102,7 +103,7 @@ Add to your MCP settings (`~/.config/claude-code/settings.json` or workspace set
 
 ### Available Tools
 
-Status legend: ✅ verified live · ⚠️ present, untested (real action) · ❓ not verified against current markup.
+Status legend: ✅ verified live · ✅* verified on an empty inbox (URL fixed; populated parsing unconfirmed) · ⚠️ present, untested (real action) · ❓ not verified against current markup.
 
 | Tool | Description | Status |
 |------|-------------|--------|
@@ -113,13 +114,13 @@ Status legend: ✅ verified live · ⚠️ present, untested (real action) · �
 | `upwork_get_profile_stats` | Get earnings / work-history stats | ✅ |
 | `upwork_get_proposals` | Get your submitted proposals | ✅ |
 | `upwork_check_session` | Check if session is valid | ✅ |
+| `upwork_get_messages` | Get inbox conversations | ✅* |
+| `upwork_get_unread_count` | Get unread message count | ✅* |
 | `upwork_submit_proposal` | Submit a proposal to a job | ⚠️ |
 | `upwork_send_message` | Send a message | ⚠️ |
 | `upwork_withdraw_proposal` | Withdraw a submitted proposal | ⚠️ |
-| `upwork_get_proposal_details` | Get details of a specific proposal | ❓ |
-| `upwork_get_messages` | Get inbox conversations | ❓ |
 | `upwork_get_conversation` | Get messages in a conversation | ❓ |
-| `upwork_get_unread_count` | Get unread message count | ❓ |
+| `upwork_get_proposal_details` | Get details of a specific proposal | ❓ |
 | `upwork_get_contracts` | Get your contracts | ❓ |
 | `upwork_get_contract_details` | Get contract details | ❓ |
 | `upwork_get_work_diary` | Get work diary entries | ❓ |
