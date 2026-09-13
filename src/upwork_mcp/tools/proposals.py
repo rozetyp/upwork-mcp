@@ -1,7 +1,51 @@
 """Proposal tools for Upwork MCP."""
 
+import re
+import asyncio
 from pydantic import BaseModel, Field
 from ..browser.client import get_browser
+
+
+async def _proposals_text(page) -> str:
+    """Load /nx/proposals/ and return innerText once the Angular list has rendered."""
+    try:
+        await page.goto("https://www.upwork.com/nx/proposals/", wait_until="domcontentloaded", timeout=45000)
+    except Exception:
+        pass
+    text = ""
+    for _ in range(10):
+        await asyncio.sleep(1.5)
+        try:
+            if "moment" in (await page.title()).lower():
+                continue
+        except Exception:
+            continue
+        try:
+            text = await page.evaluate("() => document.body.innerText") or ""
+        except Exception:
+            text = ""
+        if "proposals" in text.lower():
+            break
+    return text
+
+
+def _parse_proposals(text: str) -> list[dict]:
+    """Parse submitted/active proposal rows from the rendered text.
+
+    Each row renders as: 'Initiated <Mon D, YYYY>' / '<N> ... ago' / '<job title>' / '<profile>'.
+    """
+    out = []
+    pattern = re.compile(
+        r"Initiated ([A-Za-z]{3} \d{1,2}, \d{4})\s*\n\s*([^\n]*ago)\s*\n+\s*([^\n]+?)\s*\n+\s*([A-Za-z][^\n]*Profile)"
+    )
+    for m in pattern.finditer(text):
+        out.append({
+            "job_title": m.group(3).strip(),
+            "initiated": m.group(1).strip(),
+            "age": m.group(2).strip(),
+            "profile": m.group(4).strip(),
+        })
+    return out
 
 
 class ProposalsParams(BaseModel):
@@ -31,38 +75,9 @@ async def get_proposals(params: ProposalsParams) -> list[dict]:
     await browser.ensure_logged_in()
     page = await browser.get_page()
 
-    # Navigate to proposals page
-    status_path = {
-        "active": "active",
-        "submitted": "submitted",
-        "archived": "archived",
-        "all": ""
-    }.get(params.status.lower(), "active")
-
-    url = f"https://www.upwork.com/nx/proposals/{'?status=' + status_path if status_path else ''}"
-    await page.goto(url, wait_until="networkidle")
-
-    proposals = []
-
-    # Wait for proposals to load
-    try:
-        await page.wait_for_selector('[data-test="proposal-tile"], .proposal-row', timeout=10000)
-    except Exception:
-        # No proposals or different structure
-        pass
-
-    # Extract proposal cards
-    proposal_els = await page.query_selector_all('[data-test="proposal-tile"], .proposal-row, article')
-
-    for el in proposal_els[:params.limit]:
-        try:
-            proposal = await _extract_proposal(el)
-            if proposal:
-                proposals.append(proposal)
-        except Exception:
-            continue
-
-    return proposals
+    text = await _proposals_text(page)
+    proposals = _parse_proposals(text)
+    return proposals[:params.limit]
 
 
 async def _extract_proposal(el) -> dict | None:
