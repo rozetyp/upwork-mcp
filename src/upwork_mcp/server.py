@@ -47,27 +47,38 @@ mcp = FastMCP(
 
 @mcp.tool()
 async def upwork_search_jobs(
-    query: Annotated[str, Field(description="Search keywords")],
-    category: Annotated[str | None, Field(description="Job category filter")] = None,
-    budget_min: Annotated[int | None, Field(description="Minimum budget in USD")] = None,
-    budget_max: Annotated[int | None, Field(description="Maximum budget in USD")] = None,
+    query: Annotated[str, Field(description="Search keywords (supports AND/OR/NOT and quoted phrases)")],
+    sort: Annotated[str, Field(description="Order: 'recency' (newest) or 'relevance'")] = "recency",
     experience_level: Annotated[
         str | None, Field(description="Experience level: entry, intermediate, or expert")
     ] = None,
-    job_type: Annotated[str | None, Field(description="Job type: hourly or fixed")] = None,
+    job_type: Annotated[str | None, Field(description="Job type: hourly, fixed, or both")] = None,
+    budget_min: Annotated[int | None, Field(description="Minimum fixed-price budget in USD")] = None,
+    budget_max: Annotated[int | None, Field(description="Maximum fixed-price budget in USD")] = None,
+    hourly_min: Annotated[int | None, Field(description="Minimum hourly rate in USD/hr")] = None,
+    payment_verified: Annotated[bool, Field(description="Only clients with a verified payment method")] = False,
+    low_competition: Annotated[bool, Field(description="Only jobs with <10 proposals so far")] = False,
+    hired_before: Annotated[bool, Field(description="Only clients who have hired at least once")] = False,
+    location: Annotated[str | None, Field(description="Client location, e.g. 'United States'")] = None,
     limit: Annotated[int, Field(description="Maximum number of results", ge=1, le=50)] = 20,
 ) -> list[dict]:
     """Search for jobs on Upwork matching the specified criteria.
 
     Returns a list of job summaries with title, budget, client info, and URL.
+    All filters map to real Upwork search URL params (nothing is silently dropped).
     """
     params = JobSearchParams(
         query=query,
-        category=category,
-        budget_min=budget_min,
-        budget_max=budget_max,
+        sort=sort,
         experience_level=experience_level,
         job_type=job_type,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        hourly_min=hourly_min,
+        payment_verified=payment_verified,
+        low_competition=low_competition,
+        hired_before=hired_before,
+        location=location,
         limit=limit,
     )
     return await search_jobs(params)

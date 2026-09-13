@@ -130,32 +130,37 @@ class UpworkBrowser:
         self._page = None
         self._started = False
 
+    # Cookies that only exist for an authenticated Upwork session.
+    AUTH_COOKIES = {"master_access_token", "oauth2_global_js_token", "auth_session", "console_user"}
+
     async def is_logged_in(self) -> bool:
-        """Check if user is authenticated on Upwork."""
-        page = await self.get_page()
+        """Check auth via session cookies first — fast, and no navigation.
+
+        The old version navigated to a page and read the title, which false-negatived on
+        Cloudflare's "just a moment" interstitial (reported "logged out" while logged in)
+        and needlessly drove the browser. Auth cookies are the ground truth; only fall back
+        to a light navigation check if none are present.
+        """
+        await self.get_page()  # ensure CDP context is connected
         try:
-            await page.goto("https://www.upwork.com/nx/find-work/best-matches", wait_until="domcontentloaded")
+            cookies = await self._context.cookies()
+            names = {c.get("name") for c in cookies if "upwork.com" in (c.get("domain") or "")}
+            if names & self.AUTH_COOKIES:
+                return True
+        except Exception as e:
+            print(f"Cookie check error: {e}")
 
-            # Wait for page to stabilize (Cloudflare or content)
-            for _ in range(10):
-                await asyncio.sleep(2)
-                title = await page.title()
-                if "moment" not in title.lower():
+        # Fallback: no auth cookie found — do a light check without a long wait loop.
+        try:
+            page = await self.get_page()
+            await page.goto("https://www.upwork.com/nx/find-work/best-matches",
+                            wait_until="domcontentloaded")
+            for _ in range(6):
+                await asyncio.sleep(1.5)
+                if "moment" not in (await page.title()).lower():
                     break
-
             current_url = page.url.lower()
-            title = await page.title()
-
-            # Check for Cloudflare (still showing)
-            if "moment" in title.lower():
-                print("Cloudflare challenge detected. Please solve it in the browser window.")
-                return False
-
-            # Check for login redirect
-            if "login" in current_url or "ab/account-security" in current_url:
-                return False
-
-            return True
+            return not ("login" in current_url or "ab/account-security" in current_url)
         except Exception as e:
             print(f"Login check error: {e}")
             return False
