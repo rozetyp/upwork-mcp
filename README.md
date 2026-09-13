@@ -1,15 +1,36 @@
 # Upwork MCP Server
 
-MCP (Model Context Protocol) server for Upwork via browser automation. Enables Claude Code to search jobs, manage proposals, messages, and contracts on Upwork.
+MCP (Model Context Protocol) server for Upwork via browser automation — search jobs, read your profile / connects / proposals, and (unverified) manage proposals, messages, and contracts from an MCP client such as Claude Code.
 
-## Features
+> **Fork.** Based on [vanooo/upwork-mcp](https://github.com/vanooo/upwork-mcp) by Ivan Solskiy. This fork adds real Upwork search-filter passthrough (competition, verified-payment, budget/rate floors, sorting) and rewrites several read tools whose scrapers had drifted against Upwork's current markup (they were returning `{}` or the wrong element). See **[Tool status](#tool-status)** for exactly what is verified vs. untested — nothing here is claimed to work that hasn't been run.
 
-- **Job Search**: Search and filter Upwork jobs by keywords, budget, experience level, etc.
-- **Job Details**: Get comprehensive information about specific job postings
-- **Profile**: View your freelancer profile, connects balance, and stats
-- **Proposals**: View, submit, and withdraw proposals
-- **Messages**: Read and send messages in Upwork inbox
-- **Contracts**: View active and past contracts, work diary entries
+## Job search filters
+
+`upwork_search_jobs` passes through Upwork's real search-URL grammar (the previous version silently dropped budget/category and hardcoded the sort order):
+
+| Param | Effect |
+|-------|--------|
+| `query` | keywords (supports `AND`/`OR`/`NOT` and `"quoted phrases"`) |
+| `sort` | `recency` (newest) or `relevance` |
+| `job_type` | `hourly`, `fixed`, or `both` |
+| `experience_level` | `entry`, `intermediate`, `expert` |
+| `budget_min` / `budget_max` | fixed-price budget range (USD) |
+| `hourly_min` | minimum hourly rate (USD/hr) |
+| `payment_verified` | only clients with a verified payment method |
+| `low_competition` | only jobs with fewer than 10 proposals so far |
+| `hired_before` | only clients who have hired at least once |
+| `location` | client location, e.g. `"United States"` |
+| `limit` | max results (1–50) |
+
+Every result carries the **proposal count** (competition) when Upwork exposes it — the key signal for finding winnable jobs.
+
+## Tool status
+
+Honest state as of this fork (browser-scraping tools drift when Upwork changes its markup):
+
+- **Verified working — read-only, tested live:** `upwork_check_session`, `upwork_search_jobs`, `upwork_get_job_details`, `upwork_get_connects_balance`, `upwork_get_my_profile`, `upwork_get_profile_stats`, `upwork_get_proposals`
+- **Present but NOT tested — they take real, billable or outward actions, so exercise deliberately:** `upwork_submit_proposal`, `upwork_send_message`, `upwork_withdraw_proposal`
+- **Not yet verified against current Upwork markup (may need the same text-parsing fix):** `upwork_get_proposal_details`, `upwork_get_messages`, `upwork_get_conversation`, `upwork_get_unread_count`, `upwork_get_contracts`, `upwork_get_contract_details`, `upwork_get_work_diary`
 
 ## How It Works
 
@@ -81,26 +102,28 @@ Add to your MCP settings (`~/.config/claude-code/settings.json` or workspace set
 
 ### Available Tools
 
-| Tool | Description |
-|------|-------------|
-| `upwork_search_jobs` | Search for jobs matching criteria |
-| `upwork_get_job_details` | Get detailed job information |
-| `upwork_get_my_profile` | Get your freelancer profile |
-| `upwork_get_connects_balance` | Get current connects balance |
-| `upwork_get_profile_stats` | Get earnings and work history stats |
-| `upwork_get_proposals` | Get your submitted proposals |
-| `upwork_get_proposal_details` | Get details of a specific proposal |
-| `upwork_submit_proposal` | Submit a proposal to a job |
-| `upwork_withdraw_proposal` | Withdraw a submitted proposal |
-| `upwork_get_messages` | Get inbox conversations |
-| `upwork_get_conversation` | Get messages in a conversation |
-| `upwork_send_message` | Send a message |
-| `upwork_get_unread_count` | Get unread message count |
-| `upwork_get_contracts` | Get your contracts |
-| `upwork_get_contract_details` | Get contract details |
-| `upwork_get_work_diary` | Get work diary entries |
-| `upwork_check_session` | Check if session is valid |
-| `upwork_close_session` | Close browser and cleanup |
+Status legend: ✅ verified live · ⚠️ present, untested (real action) · ❓ not verified against current markup.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `upwork_search_jobs` | Search for jobs (see filters above) | ✅ |
+| `upwork_get_job_details` | Get detailed job information | ✅ |
+| `upwork_get_my_profile` | Get your freelancer profile | ✅ |
+| `upwork_get_connects_balance` | Get connects balance + recent history | ✅ |
+| `upwork_get_profile_stats` | Get earnings / work-history stats | ✅ |
+| `upwork_get_proposals` | Get your submitted proposals | ✅ |
+| `upwork_check_session` | Check if session is valid | ✅ |
+| `upwork_submit_proposal` | Submit a proposal to a job | ⚠️ |
+| `upwork_send_message` | Send a message | ⚠️ |
+| `upwork_withdraw_proposal` | Withdraw a submitted proposal | ⚠️ |
+| `upwork_get_proposal_details` | Get details of a specific proposal | ❓ |
+| `upwork_get_messages` | Get inbox conversations | ❓ |
+| `upwork_get_conversation` | Get messages in a conversation | ❓ |
+| `upwork_get_unread_count` | Get unread message count | ❓ |
+| `upwork_get_contracts` | Get your contracts | ❓ |
+| `upwork_get_contract_details` | Get contract details | ❓ |
+| `upwork_get_work_diary` | Get work diary entries | ❓ |
+| `upwork_close_session` | Close browser and cleanup | ❓ |
 
 ## Examples
 
