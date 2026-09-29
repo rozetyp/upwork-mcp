@@ -3,6 +3,7 @@
 import asyncio
 import subprocess
 import os
+import time
 from pathlib import Path
 from typing import Any
 from patchright.async_api import async_playwright, Browser, BrowserContext, Page
@@ -63,7 +64,7 @@ def start_chrome_with_debug() -> bool:
     for _ in range(10):
         if is_chrome_running_with_debug():
             return True
-        asyncio.get_event_loop().run_until_complete(asyncio.sleep(0.5))
+        time.sleep(0.5)  # sync helper; run_until_complete fails inside the MCP's running loop
 
     return is_chrome_running_with_debug()
 
